@@ -35,10 +35,7 @@ const int sparse_data = 2619;
 //static double V[ele_num];
 
 //
-static double K_sp[sparse_data]; //[51484];
-int RK_sp[DOF * (node_num - bound_num) + 1]={};
-static int CK_sp[sparse_data]={}; // [51484];
-static double F[DOF * (node_num - bound_num)]={};
+
 
 //
 double Volume(double x[4], double y[4], double z[4]);
@@ -53,7 +50,7 @@ void Stiffness(double B_ele[ele_num * 6 * 12], double B_eleT[ele_num * 12 * 6],
 void Multi(double **x, int Ix, int Jx, double **y, int Iy, int Jy);
 void SpVec(double *A_sp, int *RA_sp, int *CA_sp, double *b_vec, int length_vec);
 double VecVec(double *a, double *b, int n);
-void Solve();
+void Solve(double A_sp[],int Col_A_sp[],int Row_A_sp[],double B[],double U[]);
 //double *Solve(double *A_sp, int *RA_sp, int *CA_sp, double *B, int length);
 //double **Material()
 
@@ -217,6 +214,10 @@ int main() {
 	/*static double K_sp[2619]; //[51484];
 	 int RK_sp[DOF * (node_num - bound_num) + 1];
 	 static int CK_sp[2619]; // [51484];*/
+	double K_sp[sparse_data]={}; //[51484];
+	int RK_sp[DOF * (node_num - bound_num) + 1]={};
+	int CK_sp[sparse_data]={}; // [51484];
+	double F[DOF * (node_num - bound_num)]={};
 	RK_sp[0] = 0;
 	counter = 0;
 	for (int i = 0; i < DOF * (node_num - bound_num); i++) {
@@ -230,16 +231,17 @@ int main() {
 		}
 	}
 	cout << counter << "\n";
-	//Force =======================================/
+	//Force =================================
 
 	F[56] = -1000; //	F[686] = -1000;
 
-	//Solve =========================================
+	//Solve =================================
 
 
-	for (int j = 0; j < length; j++) {
-		Solve();
-	}
+//	for (int j = 0; j < length; j++) {
+	double U[length]={};
+		Solve(K_sp,CK_sp,RK_sp,F,U);
+//	}
 
 	cout << "Bye Bye" << "\n";
 	double duration;
@@ -250,7 +252,7 @@ int main() {
 
 
 
-//===========================================================================================
+//===========================================================================================//
 double Volume(double x[4], double y[4], double z[4]) {
 	double V;
 	V = (x[0] * y[2] * z[1] - x[0] * y[1] * z[2] + x[1] * y[0] * z[2]
@@ -503,21 +505,21 @@ double VecVec(double *a, double *b, int n) {
 	return L;
 }
 
-//***************/
-void Solve() {
-	static double p[length];
-	static double r[length];
-	static double U[length];
-	static double t[length];
+//====================================================================
+void Solve(double A_sp[],int Col_A_sp[],int Row_A_sp[],double B[],double U[]) {
+	double p[length];
+	double r[length];
+//	double U[length];
+	double t[length];
 	double rho = 0;
 	double rhos;
-	//double rho0;
 	double alpha;
-	int solved = 0;
+	double error=0.2;
+	bool solved = 0;
 	for (int i = 0; i < length; i++) {
-		p[i] = F[i];
-		r[i] = F[i];
-		U[i] = 0;
+		p[i] = B[i];
+		r[i] = B[i];
+//		U[i] = 0;
 	}
 	for (int i = 0; i < length; i++) {
 		rho += r[i] * r[i];
@@ -527,42 +529,38 @@ void Solve() {
 		if (solved == 0) {
 			double sum = 0;
 			for (int i = 0; i < length; i++) {
-				for (int k = RK_sp[i]; k < RK_sp[i + 1]; k++) {
-					sum += (p[CK_sp[k]]) * (K_sp[k]);
+				for (int k = Row_A_sp[i]; k < Row_A_sp[i + 1]; k++) {
+					sum += (p[Col_A_sp[k]]) * (A_sp[k]);
 				}
 				t[i] = sum;
 				sum = 0;
 			}
-			cout << "t   " << (t[0]) << "    " << t[1] << "    " << t[2]
-					<< "    " << t[3] << "\n";
+
 			double PT = 0;
 			for (int i = 0; i < length; i++) {
 				PT += p[i] * t[i];
 			}
-			cout << "PT   " << PT << "\n";
 			alpha = rho / PT;
-			cout << "alpha       " << alpha << "\n";
 			for (int i = 0; i < length; i++) {
 				U[i] += alpha * p[i];
 				r[i] -= alpha * t[i];
 			}
-			cout << "U   " << *(U + 56) << "\n" << "\n";
-			//cout << "U   " << *(U) << "   " << *(U + 1) << "   " << *(U + 2) << "   " << *(U + 3) << "\n"<<"\n";
-			//cout << "r   " << *(r) << "   " << *(r + 1) << "   " << *(r + 2) << "   " << *(r + 3) << "\n";
-			//cout << *(U + 1) << "\n";
+
 			rhos = rho;
 			rho = 0;
 			for (int i = 0; i < length; i++) {
 				rho += r[i] * r[i];
 			}
-			if ((rho / rhos) < 0.2) {
+			if ((rho / rhos) < error) {
 				solved = 1;
-				cout << "HEEEEEEEEEEY YOU" << "\n";
+				cout<<endl << "Solved in "<< j<<" Steps!" << "\n";
 			}
-			cout << "rho    " << rho << "\n";
 			for (int i = 0; i < length; i++) {
 				p[i] = r[i] + (rho / rhos) * p[i];
 			}
+
 		}
 	}
+	cout << "U(56)= " << *(U + 56) << "\n" << "\n";
 }
+
