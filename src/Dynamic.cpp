@@ -49,7 +49,8 @@ void Sparsize(double A[], int width_A, double A_sp[], int RA_sp[], int CK_sp[],
 		int* non_zero);
 void SpVec(double A_sp[], int RA_sp[], int CA_sp[], double i_vec[],
 		int length_vec, double f_vec[]);
-
+void Solve(double A_sp[], int Col_A_sp[], int Row_A_sp[], double B[],
+		double U[]);
 int main() {
 
 	//Read Nodes=================================================/
@@ -195,10 +196,7 @@ int main() {
 	//=====================================================================================
 	//=====================================================================================
 
-
 	//Sparsize K ============================================================/
-	//Sparsize(double K[],double K_sp[sparse_data],int RK_sp[DOF * (node_num - bound_num) + 1],int CK_sp[sparse_data],int sparse_data);
-
 	double K_sp[sparse_data] = { }; //[51484];
 	int RK_sp[length + 1] = { };
 	int CK_sp[sparse_data] = { }; // [51484];
@@ -410,8 +408,7 @@ void Stiffness(double B_ele[ele_num * 6 * 12], double B_eleT[ele_num * 12 * 6],
 			for (int n1 = 0; n1 < DOF * 4; n1++) {
 				if (ID_ele[i * col_ID_ele + n] != 0
 						&& ID_ele[i * col_ID_ele + n1] != 0)
-					K[(ID_ele[i * col_ID_ele + n] - 1)*length+(ID_ele[i * col_ID_ele
-							+ n1] - 1)] += K2[n][n1];
+					K[(ID_ele[i * col_ID_ele + n] - 1)*length+(ID_ele[i * col_ID_ele+ n1] - 1)] += K2[n][n1];
 			}
 		}
 	}
