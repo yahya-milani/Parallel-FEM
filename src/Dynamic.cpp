@@ -41,12 +41,14 @@ void Mass(double M[length * length], double V[ele_num],
 		int ID_ele[ele_num * 4 * DOF]);
 void Stiffness(double B_ele[ele_num * 6 * 12], double B_eleT[ele_num * 12 * 6],
 		double C[6][6], int ID_ele[4 * DOF * ele_num], double V[ele_num],
-		double K[length][length]);
+		double K[length*length]);
 void Solve(double A_sp[], int Col_A_sp[], int Row_A_sp[], double B[],
 		double U[]);
-void Multi(double **x, int Ix, int Jx, double **y, int Iy, int Jy);
-void SpVec(double *A_sp, int *RA_sp, int *CA_sp, double *b_vec, int length_vec);
-double VecVec(double *a, double *b, int n);
+void Multi(double x[], int Ix, int Jx, double y[], int Iy, int Jy, double z[]);
+void Sparsize(double A[], int width_A, double A_sp[], int RA_sp[], int CK_sp[],
+		int* non_zero);
+void SpVec(double A_sp[], int RA_sp[], int CA_sp[], double i_vec[],
+		int length_vec, double f_vec[]);
 
 int main() {
 
@@ -183,12 +185,7 @@ int main() {
 
 	clock_t start;
 	start = clock();
-	double K[length][length];
-	for (int n = 0; n < DOF * (node_num - bound_num); n++) {
-		for (int n1 = 0; n1 < DOF * (node_num - bound_num); n1++) {
-			K[n][n1] = 0;
-		}
-	}
+	double K[length*length]={};
 	double C[6][6] = { { la + 2 * m, la, la, 0, 0, 0 }, { la, la + 2 * m, la, 0,
 			0, 0 }, { la, la, la + 2 * m, 0, 0, 0 }, { 0, 0, 0, m, 0, 0 }, { 0,
 			0, 0, 0, m, 0 }, { 0, 0, 0, 0, 0, m } };
@@ -198,32 +195,19 @@ int main() {
 	//=====================================================================================
 	//=====================================================================================
 
-	// how to implement counter2??????????????????? VERY IMPORTANT where should I define sparse matrixes
-	double trace = 0;
-	for (int i = 0; i < DOF * (node_num - bound_num); i++) {
-		trace += K[i][i];
-	}
 
 	//Sparsize K ============================================================/
-	double K_sp[sparse_data] = { }; //[51484];
-	int RK_sp[DOF * (node_num - bound_num) + 1] = { };
-	int CK_sp[sparse_data] = { }; // [51484];
-	double F[DOF * (node_num - bound_num)] = { };
-	RK_sp[0] = 0;
-	counter = 0;
-	for (int i = 0; i < DOF * (node_num - bound_num); i++) {
-		for (int j = 0; j < DOF * (node_num - bound_num); j++) {
-			if (K[i][j] != 0) {
-				K_sp[counter] = K[i][j];
-				CK_sp[counter] = j;
-				counter += 1;
-			}
-			RK_sp[i + 1] = counter;
-		}
-	}
-	cout << counter << "\n";
-	//Force =================================
+	//Sparsize(double K[],double K_sp[sparse_data],int RK_sp[DOF * (node_num - bound_num) + 1],int CK_sp[sparse_data],int sparse_data);
 
+	double K_sp[sparse_data] = { }; //[51484];
+	int RK_sp[length + 1] = { };
+	int CK_sp[sparse_data] = { }; // [51484];
+	int xxx=0;
+	Sparsize(K,length,K_sp,RK_sp,CK_sp,&xxx);
+
+	cout << xxx << "\n";
+	//Force =================================
+	double F[DOF * (node_num - bound_num)] = { };
 	F[56] = -1000; //	F[686] = -1000;
 
 	//Solve =================================
@@ -388,7 +372,7 @@ void Mass(double M[length * length], double V[ele_num],
 
 void Stiffness(double B_ele[ele_num * 6 * 12], double B_eleT[ele_num * 12 * 6],
 		double C[6][6], int ID_ele[4 * DOF * ele_num], double V[ele_num],
-		double K[length][length]) {
+		double K[length*length]) {
 	int row_B_ele = 6;
 	int col_B_ele = 12;
 	int row_B_eleT = 12;
@@ -426,7 +410,7 @@ void Stiffness(double B_ele[ele_num * 6 * 12], double B_eleT[ele_num * 12 * 6],
 			for (int n1 = 0; n1 < DOF * 4; n1++) {
 				if (ID_ele[i * col_ID_ele + n] != 0
 						&& ID_ele[i * col_ID_ele + n1] != 0)
-					K[(ID_ele[i * col_ID_ele + n] - 1)][(ID_ele[i * col_ID_ele
+					K[(ID_ele[i * col_ID_ele + n] - 1)*length+(ID_ele[i * col_ID_ele
 							+ n1] - 1)] += K2[n][n1];
 			}
 		}
@@ -435,71 +419,58 @@ void Stiffness(double B_ele[ele_num * 6 * 12], double B_eleT[ele_num * 12 * 6],
 	int counter2 = 0;
 	for (int i = 0; i < length; i++) {
 		for (int j = 0; j < length; j++) {
-			if (K[i][j] != 0) {
+			if (K[i*length+j] != 0) {
 				counter2 += 1;
 			}
 		}
 	}
 }
 
-void Multi2(double **x, int Ix, int Jx, double **y, int Iy, int Jy,
-		double **z) {
+void Multi(double x[], int Ix, int Jx, double y[], int Iy, int Jy, double z[]) {
 	//Rerurns x*y & Jx=Iy
 	double sum = 0;
-
 	for (int i = 0; i < Ix; i++) {
 		for (int j = 0; j < Jy; j++) {
 			for (int k = 0; k < Iy; k++) {
-				sum += (*(*(x + i) + k)) * (*(*(y + k) + j));
+				sum += x[i * Jx + k] * y[k * Jy + j];
 			}
 			// cout<<sum<<"\n";
-			*(*(z + i) + j) = sum;
+			z[i * Iy + j] = sum;
 			sum = 0;
 		}
 	}
 }
 
-void Multi(double **x, int Ix, int Jx, double **y, int Iy, int Jy) {
-	//Rerurns x*y & Jx=Iy
-	double sum = 0;
-	double **R;
-	R = new double *[Ix];
-	for (int i = 0; i < Ix; i++)
-		R[i] = new double[Jy];
-	for (int i = 0; i < Ix; i++) {
-		for (int j = 0; j < Jy; j++) {
-			for (int k = 0; k < Iy; k++) {
-				sum += (*(*(x + i) + k)) * (*(*(y + k) + j));
+void Sparsize(double A[], int width_A, double A_sp[], int RA_sp[], int CK_sp[],
+		int* non_zero) {
+		RA_sp[0] = 0;
+		int counter = 0;
+		for (int i = 0; i < width_A; i++) {
+			for (int j = 0; j < width_A; j++) {
+				if (A[i*width_A+j] != 0) {
+					A_sp[counter] = A[i*width_A+j];
+					CK_sp[counter] = j;
+					counter += 1;
+				}
+				RA_sp[i + 1] = counter;
 			}
-			// cout<<sum<<"\n";
-			*(*(R + i) + j) = sum;
-			sum = 0;
 		}
-	}
+		*non_zero=counter;
+		cout << counter << "\n";
 }
 
-void SpVec(double *A_sp, int *RA_sp, int *CA_sp, double *b_vec,
-		int length_vec) {
-	//returns A*b
-	//static double C[1416]; //define it cause it's not a good idea to return local variable adress
+
+void SpVec(double A_sp[], int RA_sp[], int CA_sp[], double i_vec[],
+		int length_vec, double f_vec[]) {
+	//returns A*b=f_vec
+
 	double sum = 0;
 	for (int i = 0; i < length_vec; i++) {
-		for (int j = *(RA_sp + i); j < *(RA_sp + i + 1); j++) {
-			sum += *(b_vec + *(CA_sp + j)) * (*(A_sp + j));
+		for (int j = RA_sp[i]; j < RA_sp[i + 1]; j++) {
+			sum += i_vec[CA_sp[j]] * A_sp[j];
 		}
-		//cout<<sum<<"\n";
-		//	C[i] = sum;
 		sum = 0;
 	}
-	//return C;
-}
-
-double VecVec(double *a, double *b, int n) {
-	static double L;
-	L = 0;
-	for (int i = 0; i < n; i++)
-		L += *(a + i) * (*(b + i));
-	return L;
 }
 
 //====================================================================
