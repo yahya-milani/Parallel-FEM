@@ -25,14 +25,19 @@ const int boundary[4] = { 0, 3, 6, 7 }; //{ 2,3,5,6 };
 const int DOF = 3;
 const int length = DOF * (node_num - bound_num);
 const double Ro = 1000;
+const double damp_coeff = 0.1;
 const double m = 782.7586;
 const double la = 7866.7;
-const double tF = 100;
+const double tF = 200;
 const double dt = 0.01;
-const double dt_save = 1;
+const double dt_save = 5;
 const int sparse_data = 2619;
+const double error = 0.001;
 
 //Functions=========================================
+void Print_int(int A[], int width);
+void Print(double A[], int width);
+void Print2(double A[], int height, int width);
 double Volume(double x[4], double y[4], double z[4]);
 void Jacobi(double x[4], double y[4], double z[4], double Vol, double J[16]);
 void shape_function(double B[ele_num * 6 * 12], double J[ele_num][4][4]);
@@ -41,7 +46,7 @@ void Mass(double M[length * length], double V[ele_num],
 		int ID_ele[ele_num * 4 * DOF]);
 void Stiffness(double B_ele[ele_num * 6 * 12], double B_eleT[ele_num * 12 * 6],
 		double C[6][6], int ID_ele[4 * DOF * ele_num], double V[ele_num],
-		double K[length*length]);
+		double K[length * length]);
 void Solve(double A_sp[], int Col_A_sp[], int Row_A_sp[], double B[],
 		double U[]);
 void Multi(double x[], int Ix, int Jx, double y[], int Iy, int Jy, double z[]);
@@ -177,43 +182,89 @@ int main() {
 	shape_function(B_ele, B);
 
 	double B_eleT[ele_num * 12 * 6] = { };
-	//int row_B_eleT = 12;
-	//int col_B_eleT = 6;
 	transpose(B_ele, row_B_ele, col_B_ele, B_eleT);
 
 	double M[length * length] = { };
 	Mass(M, V, ID_ele);
-
 	clock_t start;
 	start = clock();
-	double K[length*length]={};
+	double K[length * length] = { };
 	double C[6][6] = { { la + 2 * m, la, la, 0, 0, 0 }, { la, la + 2 * m, la, 0,
 			0, 0 }, { la, la, la + 2 * m, 0, 0, 0 }, { 0, 0, 0, m, 0, 0 }, { 0,
 			0, 0, 0, m, 0 }, { 0, 0, 0, 0, 0, m } };
 	Stiffness(B_ele, B_eleT, C, ID_ele, V, K);
+
+	double A_dyn[length * length];
+	double B_dyn[length * length];
+	double C_dyn[length * length];
+	for (int i = 0; i < length; ++i) {
+		for (int j = 0; j < length; ++j) {
+
+			A_dyn[i * length + j] = M[i * length + j]
+					+ 0.5 * dt * damp_coeff * M[i * length + j];
+			B_dyn[i * length + j] = 2 * M[i * length + j]
+					- K[i * length + j] * dt * dt;
+			C_dyn[i * length + j] = 0.5 * dt * damp_coeff * M[i * length + j]
+					- M[i * length + j];
+		}
+	}
 
 	//=====================================================================================
 	//=====================================================================================
 	//=====================================================================================
 
 	//Sparsize K ============================================================/
-	double K_sp[sparse_data] = { }; //[51484];
-	int RK_sp[length + 1] = { };
-	int CK_sp[sparse_data] = { }; // [51484];
-	int xxx=0;
-	Sparsize(K,length,K_sp,RK_sp,CK_sp,&xxx);
+//	double K_sp[sparse_data] = { }; //[51484];
+//	int RK_sp[length + 1] = { };
+//	int CK_sp[sparse_data] = { }; // [51484];
+	int xxx = 0;
+//	Sparsize(K, length, K_sp, RK_sp, CK_sp, &xxx);
+//	cout << xxx << "\n";
+//
+	double A_dyn_sp[length] = { };
+	int RA_dyn_sp[length + 1] = { };
+	int CA_dyn_sp[length] = { };
+	Sparsize(A_dyn, length, A_dyn_sp, RA_dyn_sp, CA_dyn_sp, &xxx);
+	cout << xxx << "\n";
 
+	double B_dyn_sp[sparse_data] = { };
+	int RB_dyn_sp[length + 1] = { };
+	int CB_dyn_sp[sparse_data] = { };
+	Sparsize(B_dyn, length, B_dyn_sp, RB_dyn_sp, CB_dyn_sp, &xxx);
+	cout << xxx << "\n";
+	double C_dyn_sp[length] = { };
+	int RC_dyn_sp[length + 1] = { };
+	int CC_dyn_sp[length] = { };
+	Sparsize(C_dyn, length, C_dyn_sp, RC_dyn_sp, CC_dyn_sp, &xxx);
+//    Print_int(RB_dyn_sp,length+1);
 	cout << xxx << "\n";
 	//Force =================================
-	double F[DOF * (node_num - bound_num)] = { };
+	double F[length] = { };
 	F[56] = -1000; //	F[686] = -1000;
 
-	//Solve =================================
+	double U1[length] = { };
+	double U2[length] = { };
+	double U_temp[length] = { };
+	double R_side1[length] = { };
+	double R_side[length] = { };
+	for (int i = 0; i < tF/dt; i++) {
+		//cout<<"step:  "<<i+2<<endl;
 
-//	for (int j = 0; j < length; j++) {
-	double U[length] = { };
-	Solve(K_sp, CK_sp, RK_sp, F, U);
-//	}
+		//Print_int(RB_dyn_sp,length);
+		SpVec(B_dyn_sp, RB_dyn_sp, CB_dyn_sp, U2, length, R_side1);
+		//Print(R_side1,length);
+		SpVec(C_dyn_sp, RC_dyn_sp, CC_dyn_sp, U1, length, R_side);
+		for (int i1 = 0; i1 < length; i1++) {
+			R_side[i1] += R_side1[i1] + F[i1] * dt * dt;
+		}
+		//Print(R_side,length);
+		Solve(A_dyn_sp, CA_dyn_sp, RA_dyn_sp, R_side, U_temp);
+		for (int i1 = 0; i1 < length; i1++) {
+			U1[i1] = U2[i1];
+			U2[i1] = U_temp[i1];
+			U_temp[i1]=0;
+		}
+	}
 
 	cout << "Bye Bye" << "\n";
 	double duration;
@@ -232,6 +283,30 @@ int main() {
 //===========================================================================================//
 //===========================================================================================//
 //===========================================================================================//
+
+void Print_int(int A[], int width) {
+	for (int i = 0; i < width; ++i) {
+		cout << endl << i << "  : " << A[i];
+	}
+	cout << endl;
+}
+void Print(double A[], int width) {
+	for (int i = 0; i < width; ++i) {
+		cout << endl << i << "  : " << A[i];
+	}
+	cout << endl;
+}
+
+void Print2(double A[], int height, int width) {
+	for (int i = 0; i < height; ++i) {
+		cout << endl << i << " :  ";
+		for (int j = 0; j < width; ++j) {
+			cout << A[i * width + j] << "  ";
+		}
+
+	}
+	cout << endl;
+}
 double Volume(double x[4], double y[4], double z[4]) {
 	double V;
 	V = (x[0] * y[2] * z[1] - x[0] * y[1] * z[2] + x[1] * y[0] * z[2]
@@ -370,7 +445,7 @@ void Mass(double M[length * length], double V[ele_num],
 
 void Stiffness(double B_ele[ele_num * 6 * 12], double B_eleT[ele_num * 12 * 6],
 		double C[6][6], int ID_ele[4 * DOF * ele_num], double V[ele_num],
-		double K[length*length]) {
+		double K[length * length]) {
 	int row_B_ele = 6;
 	int col_B_ele = 12;
 	int row_B_eleT = 12;
@@ -408,7 +483,8 @@ void Stiffness(double B_ele[ele_num * 6 * 12], double B_eleT[ele_num * 12 * 6],
 			for (int n1 = 0; n1 < DOF * 4; n1++) {
 				if (ID_ele[i * col_ID_ele + n] != 0
 						&& ID_ele[i * col_ID_ele + n1] != 0)
-					K[(ID_ele[i * col_ID_ele + n] - 1)*length+(ID_ele[i * col_ID_ele+ n1] - 1)] += K2[n][n1];
+					K[(ID_ele[i * col_ID_ele + n] - 1) * length
+							+ (ID_ele[i * col_ID_ele + n1] - 1)] += K2[n][n1];
 			}
 		}
 	}
@@ -416,7 +492,7 @@ void Stiffness(double B_ele[ele_num * 6 * 12], double B_eleT[ele_num * 12 * 6],
 	int counter2 = 0;
 	for (int i = 0; i < length; i++) {
 		for (int j = 0; j < length; j++) {
-			if (K[i*length+j] != 0) {
+			if (K[i * length + j] != 0) {
 				counter2 += 1;
 			}
 		}
@@ -431,7 +507,6 @@ void Multi(double x[], int Ix, int Jx, double y[], int Iy, int Jy, double z[]) {
 			for (int k = 0; k < Iy; k++) {
 				sum += x[i * Jx + k] * y[k * Jy + j];
 			}
-			// cout<<sum<<"\n";
 			z[i * Iy + j] = sum;
 			sum = 0;
 		}
@@ -440,32 +515,33 @@ void Multi(double x[], int Ix, int Jx, double y[], int Iy, int Jy, double z[]) {
 
 void Sparsize(double A[], int width_A, double A_sp[], int RA_sp[], int CK_sp[],
 		int* non_zero) {
-		RA_sp[0] = 0;
-		int counter = 0;
-		for (int i = 0; i < width_A; i++) {
-			for (int j = 0; j < width_A; j++) {
-				if (A[i*width_A+j] != 0) {
-					A_sp[counter] = A[i*width_A+j];
-					CK_sp[counter] = j;
-					counter += 1;
-				}
-				RA_sp[i + 1] = counter;
+	RA_sp[0] = 0;
+	int counter = 0;
+	for (int i = 0; i < width_A; i++) {
+		for (int j = 0; j < width_A; j++) {
+			if (A[i * width_A + j] != 0) {
+				A_sp[counter] = A[i * width_A + j];
+				CK_sp[counter] = j;
+				counter += 1;
 			}
+			RA_sp[i + 1] = counter;
 		}
-		*non_zero=counter;
-		cout << counter << "\n";
+	}
+	*non_zero = counter;
+	cout << counter << "\n";
 }
-
 
 void SpVec(double A_sp[], int RA_sp[], int CA_sp[], double i_vec[],
 		int length_vec, double f_vec[]) {
-	//returns A*b=f_vec
+	//returns A*i_vec=f_vec
 
 	double sum = 0;
 	for (int i = 0; i < length_vec; i++) {
 		for (int j = RA_sp[i]; j < RA_sp[i + 1]; j++) {
 			sum += i_vec[CA_sp[j]] * A_sp[j];
 		}
+		//cout<<endl<<"sum= "<<sum;
+		f_vec[i] = sum;
 		sum = 0;
 	}
 }
@@ -475,17 +551,14 @@ void Solve(double A_sp[], int Col_A_sp[], int Row_A_sp[], double B[],
 		double U[]) {
 	double p[length];
 	double r[length];
-//	double U[length];
 	double t[length];
 	double rho = 0;
 	double rhos;
 	double alpha;
-	double error = 0.2;
 	bool solved = 0;
 	for (int i = 0; i < length; i++) {
 		p[i] = B[i];
 		r[i] = B[i];
-//		U[i] = 0;
 	}
 	for (int i = 0; i < length; i++) {
 		rho += r[i] * r[i];
@@ -518,7 +591,7 @@ void Solve(double A_sp[], int Col_A_sp[], int Row_A_sp[], double B[],
 			}
 			if ((rho / rhos) < error) {
 				solved = 1;
-				cout << endl << "Solved in " << j << " Steps!" << "\n";
+				//cout << endl << "Solved in " << j << " Steps!" << "\n";
 			}
 			for (int i = 0; i < length; i++) {
 				p[i] = r[i] + (rho / rhos) * p[i];
@@ -526,7 +599,7 @@ void Solve(double A_sp[], int Col_A_sp[], int Row_A_sp[], double B[],
 
 		}
 	}
-	cout << "rho    " << rho << "\n";
-	cout << "U(56)= " << *(U + 56) << "\n" << "\n";
+	//cout << "rho    " << rho << "\n";
+	//cout << "U(56)= " << *(U + 56) << "\n" << "\n";
 }
 
