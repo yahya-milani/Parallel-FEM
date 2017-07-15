@@ -4,13 +4,13 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 CPP_SRCS += \
-../src/Dynamic.cpp 
+../src/Visco.cpp 
 
 OBJS += \
-./src/Dynamic.o 
+./src/Visco.o 
 
 CPP_DEPS += \
-./src/Dynamic.d 
+./src/Visco.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes
