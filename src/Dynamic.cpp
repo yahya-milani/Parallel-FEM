@@ -56,6 +56,8 @@ void SpVec(double A_sp[], int RA_sp[], int CA_sp[], double i_vec[],
 		int length_vec, double f_vec[]);
 void Solve(double A_sp[], int Col_A_sp[], int Row_A_sp[], double B[],
 		double U[]);
+void Solve_daig(double A_sp[], double B[], double U[]);
+
 int main() {
 
 	//Read Nodes=================================================/
@@ -258,7 +260,8 @@ int main() {
 			R_side[i1] += R_side1[i1] + F[i1] * dt * dt;
 		}
 		//Print(R_side,length);
-		Solve(A_dyn_sp, CA_dyn_sp, RA_dyn_sp, R_side, U_temp);
+		//Solve(A_dyn_sp, CA_dyn_sp, RA_dyn_sp, R_side, U_temp);
+		Solve_daig(A_dyn_sp,R_side,U_temp);
 		for (int i1 = 0; i1 < length; i1++) {
 			U1[i1] = U2[i1];
 			U2[i1] = U_temp[i1];
@@ -606,6 +609,15 @@ void Solve(double A_sp[], int Col_A_sp[], int Row_A_sp[], double B[],
 
 		}
 	}
+	//cout << "rho    " << rho << "\n";
+	//cout << "U(56)= " << *(U + 56) << "\n" << "\n";
+}
+
+void Solve_daig(double A_sp[], double B[], double U[]) {
+	for (int i = 0; i < length; ++i) {
+		U[i] = B[i] / A_sp[i];
+	}
+
 	//cout << "rho    " << rho << "\n";
 	//cout << "U(56)= " << *(U + 56) << "\n" << "\n";
 }
