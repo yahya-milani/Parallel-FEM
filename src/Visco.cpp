@@ -27,12 +27,12 @@ const int length = DOF * (node_num - bound_num);
 const double Ro = 1000;
 const double damp_coeff = 0.1;
 const double mu = 782.7586;
-const double E=2000;
-const double v=0.45;
+const double E = 2000;
+const double v = 0.45;
 const double la = 7866.7;
 const double tF = 200;
 const double dt = 0.01;
-const double dt_change=0.5;
+const double dt_change = 0.5;
 const double dt_save = 5;
 const int sparse_data = 2619;
 const double error = 0.0001;
@@ -57,6 +57,9 @@ void Sparsize(double A[], int width_A, double A_sp[], int RA_sp[], int CK_sp[],
 		int* non_zero);
 void SpVec(double A_sp[], int RA_sp[], int CA_sp[], double i_vec[],
 		int length_vec, double f_vec[]);
+void Change_B(double B_dyn[length * length], double B_dyn_sp[sparse_data],
+		double M[length * length], double K_mu[length * length],
+		double K_la[length * length], double la, double mu);
 void Solve(double A_sp[], int Col_A_sp[], int Row_A_sp[], double B[],
 		double U[]);
 void Solve_daig(double A_sp[], double B[], double U[]);
@@ -195,12 +198,12 @@ int main() {
 	start = clock();
 	double K_la[length * length] = { };
 	double K_mu[length * length] = { };
-	double C_la[6][6] = { { 1, 1, 1, 0, 0, 0 }, { 1, 1 ,1, 0,
-			0, 0 }, { 1, 1, 1 , 0, 0, 0 }, { 0, 0, 0, 0, 0, 0 }, { 0,
-			0, 0, 0, 0, 0 }, { 0, 0, 0, 0, 0, 0 } };
-	double C_mu[6][6]={ { 2, 0, 0, 0, 0, 0 }, { 0, 2, 0, 0,
-			0, 0 }, { 0, 0, 2, 0, 0, 0 }, { 0, 0, 0, 1, 0, 0 }, { 0,
-			0, 0, 0, 1, 0 }, { 0, 0, 0, 0, 0, 1 } };
+	double C_la[6][6] = { { 1, 1, 1, 0, 0, 0 }, { 1, 1, 1, 0, 0, 0 }, { 1, 1, 1,
+			0, 0, 0 }, { 0, 0, 0, 0, 0, 0 }, { 0, 0, 0, 0, 0, 0 }, { 0, 0, 0, 0,
+			0, 0 } };
+	double C_mu[6][6] = { { 2, 0, 0, 0, 0, 0 }, { 0, 2, 0, 0, 0, 0 }, { 0, 0, 2,
+			0, 0, 0 }, { 0, 0, 0, 1, 0, 0 }, { 0, 0, 0, 0, 1, 0 }, { 0, 0, 0, 0,
+			0, 1 } };
 	Stiffness(B_ele, B_eleT, C_la, ID_ele, V, K_la);
 	Stiffness(B_ele, B_eleT, C_mu, ID_ele, V, K_mu);
 
@@ -213,7 +216,9 @@ int main() {
 			A_dyn[i * length + j] = M[i * length + j]
 					+ 0.5 * dt * damp_coeff * M[i * length + j];
 			B_dyn[i * length + j] = 2 * M[i * length + j]
-					- (la*K_la[i * length + j]+mu*K_mu[i * length + j]) * dt * dt;
+					- (la * K_la[i * length + j] + mu * K_mu[i * length + j])
+							* dt * dt;
+			//B2_dyn[]
 			C_dyn[i * length + j] = 0.5 * dt * damp_coeff * M[i * length + j]
 					- M[i * length + j];
 		}
@@ -257,9 +262,22 @@ int main() {
 	double U_temp[length] = { };
 	double R_side1[length] = { };
 	double R_side[length] = { };
+	int Step = dt_change / dt;
 	for (int i = 0; i < tF / dt; i++) {
 		//cout<<"step:  "<<i+2<<endl;
+		if ((i % Step) == 0) {
+			double mu1 = mu;
+			double la1 = la;
+			for (int i1 = 0; i1 < length; ++i1) {
+				for (int j1 = 0; j1 < length; ++j1) {
+					B_dyn[i1 * length + j1] = 2 * M[i1 * length + j1]
+							- (la1 * K_la[i1 * length + j1]
+									+ mu1 * K_mu[i1 * length + j1]) * dt * dt;
+				}
+				Sparsize(B_dyn, length, B_dyn_sp, RB_dyn_sp, CB_dyn_sp, &xxx);
+			}
 
+		}
 		//Print_int(RB_dyn_sp,length);
 		SpVec(B_dyn_sp, RB_dyn_sp, CB_dyn_sp, U2, length, R_side1);
 		//Print(R_side1,length);
@@ -269,7 +287,7 @@ int main() {
 		}
 		//Print(R_side,length);
 		//Solve(A_dyn_sp, CA_dyn_sp, RA_dyn_sp, R_side, U_temp);
-		Solve_daig(A_dyn_sp,R_side,U_temp);
+		Solve_daig(A_dyn_sp, R_side, U_temp);
 		for (int i1 = 0; i1 < length; i1++) {
 			U1[i1] = U2[i1];
 			U2[i1] = U_temp[i1];
@@ -556,6 +574,22 @@ void SpVec(double A_sp[], int RA_sp[], int CA_sp[], double i_vec[],
 		f_vec[i] = sum;
 		sum = 0;
 	}
+}
+
+void Change_B(double B_dyn[length * length], double B_dyn_sp[sparse_data],
+		double M[length * length], double K_mu[length * length],
+		double K_la[length * length], double la, double mu) {
+	for (int i = 0; i < length; i++) {
+		for (int j = 0; j < length; j++) {
+			B_dyn[i * length + j] = 2 * M[i * length + j]
+					- (la * K_la[i * length + j] + mu * K_mu[i * length + j])
+							* dt * dt;
+		}
+	}
+	int Column[length];
+	int Row[length + 1];
+	int sss = 0;
+	Sparsize(B_dyn, length, B_dyn_sp, Row, Column, &sss);
 }
 
 //====================================================================
