@@ -32,7 +32,7 @@ const double tF = 200;
 const double dt = 0.01;
 const double dt_save = 5;
 const int sparse_data = 2619;
-const double error = 0.001;
+const double error = 0.0001;
 
 //Functions=========================================
 void Print_int(int A[], int width);
@@ -247,7 +247,7 @@ int main() {
 	double U_temp[length] = { };
 	double R_side1[length] = { };
 	double R_side[length] = { };
-	for (int i = 0; i < tF/dt; i++) {
+	for (int i = 0; i < tF / dt; i++) {
 		//cout<<"step:  "<<i+2<<endl;
 
 		//Print_int(RB_dyn_sp,length);
@@ -262,13 +262,14 @@ int main() {
 		for (int i1 = 0; i1 < length; i1++) {
 			U1[i1] = U2[i1];
 			U2[i1] = U_temp[i1];
-			U_temp[i1]=0;
+			U_temp[i1] = 0;
 		}
 	}
 
 	cout << "Bye Bye" << "\n";
 	double duration;
 	duration = (clock() - start) / (double) CLOCKS_PER_SEC;
+	cout << U2[56] << endl;
 	cout << "time: " << duration << endl;
 
 	return 0;
@@ -549,23 +550,29 @@ void SpVec(double A_sp[], int RA_sp[], int CA_sp[], double i_vec[],
 //====================================================================
 void Solve(double A_sp[], int Col_A_sp[], int Row_A_sp[], double B[],
 		double U[]) {
-	double p[length];
-	double r[length];
-	double t[length];
+	double p[length] = { };
+	double r[length] = { };
+	double t[length] = { };
 	double rho = 0;
 	double rhos;
 	double alpha;
+	double sum = 0;
 	bool solved = 0;
+
 	for (int i = 0; i < length; i++) {
-		p[i] = B[i];
-		r[i] = B[i];
+		for (int k = Row_A_sp[i]; k < Row_A_sp[i + 1]; k++) {
+			sum += (U[Col_A_sp[k]]) * (A_sp[k]);
+		}
+		r[i] = B[i] - sum;
+		p[i] = r[i];
+		sum = 0;
 	}
 	for (int i = 0; i < length; i++) {
 		rho += r[i] * r[i];
 	}
 	for (int j = 0; j < length; j++) {
 		if (solved == 0) {
-			double sum = 0;
+			sum = 0;
 			for (int i = 0; i < length; i++) {
 				for (int k = Row_A_sp[i]; k < Row_A_sp[i + 1]; k++) {
 					sum += (p[Col_A_sp[k]]) * (A_sp[k]);
@@ -589,7 +596,7 @@ void Solve(double A_sp[], int Col_A_sp[], int Row_A_sp[], double B[],
 			for (int i = 0; i < length; i++) {
 				rho += r[i] * r[i];
 			}
-			if ((rho / rhos) < error) {
+			if ((rho) < error) {
 				solved = 1;
 				//cout << endl << "Solved in " << j << " Steps!" << "\n";
 			}
