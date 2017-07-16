@@ -55,6 +55,9 @@ void Solve(double A_sp[], int Col_A_sp[], int Row_A_sp[], double B[],
 void Multi(double x[], int Ix, int Jx, double y[], int Iy, int Jy, double z[]);
 void Sparsize(double A[], int width_A, double A_sp[], int RA_sp[], int CK_sp[],
 		int* non_zero);
+void Sparsize_reduced(double B_dyn[length * length],
+		double B_dyn_sp[sparse_data], int RB_dyn_sp[length + 1],
+		int CB_dyn_sp[sparse_data]);
 void SpVec(double A_sp[], int RA_sp[], int CA_sp[], double i_vec[],
 		int length_vec, double f_vec[]);
 void Change_B(double B_dyn[length * length], double B_dyn_sp[sparse_data],
@@ -218,7 +221,6 @@ int main() {
 			B_dyn[i * length + j] = 2 * M[i * length + j]
 					- (la * K_la[i * length + j] + mu * K_mu[i * length + j])
 							* dt * dt;
-			//B2_dyn[]
 			C_dyn[i * length + j] = 0.5 * dt * damp_coeff * M[i * length + j]
 					- M[i * length + j];
 		}
@@ -262,30 +264,29 @@ int main() {
 	double U_temp[length] = { };
 	double R_side1[length] = { };
 	double R_side[length] = { };
-	int Step = dt_change / dt;
+	int Step_change = dt_change / dt;
 	for (int i = 0; i < tF / dt; i++) {
 		//cout<<"step:  "<<i+2<<endl;
-		if ((i % Step) == 0) {
-			double mu1 = mu;
-			double la1 = la;
+//////////////////////////////////////////////////////////////////////
+		if ((i % Step_change) == 0) {
+			double mu1 = mu*i/1000;
+			double la1 = la*i/1000;
 			for (int i1 = 0; i1 < length; ++i1) {
 				for (int j1 = 0; j1 < length; ++j1) {
 					B_dyn[i1 * length + j1] = 2 * M[i1 * length + j1]
 							- (la1 * K_la[i1 * length + j1]
 									+ mu1 * K_mu[i1 * length + j1]) * dt * dt;
 				}
-				Sparsize(B_dyn, length, B_dyn_sp, RB_dyn_sp, CB_dyn_sp, &xxx);
+				Sparsize_reduced(B_dyn, B_dyn_sp, RB_dyn_sp, CB_dyn_sp);
 			}
 
 		}
-		//Print_int(RB_dyn_sp,length);
+///////////////////////////////////////////////////////////////////////
 		SpVec(B_dyn_sp, RB_dyn_sp, CB_dyn_sp, U2, length, R_side1);
-		//Print(R_side1,length);
 		SpVec(C_dyn_sp, RC_dyn_sp, CC_dyn_sp, U1, length, R_side);
 		for (int i1 = 0; i1 < length; i1++) {
 			R_side[i1] += R_side1[i1] + F[i1] * dt * dt;
 		}
-		//Print(R_side,length);
 		//Solve(A_dyn_sp, CA_dyn_sp, RA_dyn_sp, R_side, U_temp);
 		Solve_daig(A_dyn_sp, R_side, U_temp);
 		for (int i1 = 0; i1 < length; i1++) {
@@ -559,6 +560,16 @@ void Sparsize(double A[], int width_A, double A_sp[], int RA_sp[], int CK_sp[],
 	}
 	*non_zero = counter;
 	cout << counter << "\n";
+}
+
+void Sparsize_reduced(double B_dyn[length * length],
+		double B_dyn_sp[sparse_data], int RB_dyn_sp[length + 1],
+		int CB_dyn_sp[sparse_data]) {
+	for (int i = 0; i < length; i++) {
+		for (int k = RB_dyn_sp[i]; k < RB_dyn_sp[i + 1]; k++) {
+			B_dyn_sp[k] = B_dyn[i * length + CB_dyn_sp[k]];
+		}
+	}
 }
 
 void SpVec(double A_sp[], int RA_sp[], int CA_sp[], double i_vec[],
